@@ -79,3 +79,21 @@ Le fichier fait environ 21 500 lignes d'assembleur au total.
 3. Spectral : FFT en point fixe, phase vocoder, mesure de CPU, décision de le garder ou non.
 
 Test sur la machine : à faire par le propriétaire du Model:Cycles après chaque étape, pas avant.
+
+## 8. Mesures (étape 1, en cours)
+
+Ordinateur, sans émulateur. Référence : le planificateur `granular_sample_player.h` de Clouds, en `float`, compilé
+pour l'ordinateur (stmlib en mode TEST), un sinus de 220 Hz, 32 échantillons par bloc, 1200 blocs.
+
+- Clouds, `window_shape` = 0.6 : pic 0.47, RMS 0.18.
+- Clouds, `window_shape` = 0.3 : pic 0.59, RMS 0.21.
+- Clouds, `window_shape` = 0.5 **exactement** : silence (pic 0.00). Dans `grain.h`, pour 0.5 la pente est à 0 et le
+  lissage aussi, donc l'enveloppe passe par la branche « pente » qui multiplie par 0. Quirk de Clouds à noter ; le port
+  point fixe ne le reproduit pas.
+- Port point fixe (`tools/machines/clouds_gran/`), même nombre de grains (1 visé) et même taille (4096) : pic 0.36,
+  RMS 0.07.
+
+Écart à résorber avant la prise en compte en émulation : loi de panoramique (Clouds, mono : gains à sin(pan) = 0.71),
+lissage de l'enveloppe par la table de fenêtre (`lut_window`, absente du port), normalisation de gain (`rsqrt` au-delà
+de deux grains) et correspondance des paramètres (`overlap` élevé au cube dans Clouds). Pas de mesure d'émulation
+encore.
