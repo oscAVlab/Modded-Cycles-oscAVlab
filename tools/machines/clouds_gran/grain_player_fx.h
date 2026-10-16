@@ -32,12 +32,15 @@ class GrainPlayerFx {
   // `out` : cumul int32 Q15 (le bloc doit être mis à zéro par l'appelant).
   void Play(const int16_t* buf_l, const int16_t* buf_r, int32_t len,
             int32_t position_q15, int32_t size_samples, int32_t pitch_q16,
-            int32_t density_q15, int32_t spread_q15, int32_t* out, int32_t size) {
+            int32_t density_q15, int32_t spread_q15, int32_t window_shape_q15,
+            int32_t overlap_q15, int32_t* out, int32_t size) {
+    window_shape_ = window_shape_q15;
+    overlap_ = overlap_q15;
     // Espacement cible entre deux grains : plus de densité = grains plus serrés.
     // Nombre de grains actifs visé = density * kMaxGrains.
     int32_t target = (density_q15 * kMaxGrains) >> 15;
     if (target < 1) target = 1;
-    int32_t spacing = (size_hint_ * kMaxGrains) / target;  // échantillons
+    int32_t spacing = size_hint_ / target;  // échantillons (Clouds : grain_size_hint / cible)
     if (spacing < 1) spacing = 1;
 
     for (int32_t t = 0; t < size; ++t) {
@@ -51,10 +54,25 @@ class GrainPlayerFx {
         }
       }
     }
+    int32_t active = 0;
     for (int32_t i = 0; i < kMaxGrains; ++i) {
       if (grains_[i].active()) {
         grains_[i].OverlapAdd(buf_l, buf_r, len, out, size);
       }
+      if (grains_[i].active()) ++active;
+    }
+    // Normalisation de Clouds : 1/sqrt(n-1) au-delà de deux grains actifs, puis un gain de fenêtre
+    // (1 + 2*shape, borné à [1, 2]) fondu selon overlap. Table en Q15 pour n = 1..8.
+    static const int32_t kInvSqrt[kMaxGrains + 1] = {
+        kOne, kOne, kOne, 23170, 18919, 16384, 14654, 13377, 12385};
+    int32_t norm = kInvSqrt[active < 0 ? 0 : (active > kMaxGrains ? kMaxGrains : active)];
+    int32_t w = kOne + 2 * window_shape_;
+    if (w > 2 * kOne) w = 2 * kOne;
+    if (w < kOne) w = kOne;
+    int32_t window_gain = kOne + (((w - kOne) * overlap_) >> 15);
+    norm = (norm * window_gain) >> 15;
+    for (int32_t t = 0; t < 2 * size; ++t) {
+      out[t] = (out[t] * norm) >> 15;
     }
   }
 
@@ -110,7 +128,7 @@ class GrainPlayerFx {
     if (gain_r > kOne) gain_r = kOne;
 
     // Fenêtre : forme 0.5 (triangle plein), comme la valeur par défaut de Clouds.
-    g->Start(pre_delay, len, start, size, pitch_q16, kOne / 2, gain_l, gain_r);
+    g->Start(pre_delay, len, start, size, pitch_q16, window_shape_, gain_l, gain_r);
     // Estimation de la taille de grain pour l'espacement (lissage 1/10).
     size_hint_ += (size - size_hint_) / 10;
   }
@@ -119,6 +137,8 @@ class GrainPlayerFx {
   uint32_t rng_ = 1;
   int32_t spacing_phasor_ = 0;
   int32_t size_hint_ = 1024;
+  int32_t window_shape_ = kOne / 2;
+  int32_t overlap_ = 0;
 };
 
 }  // namespace clouds_gran

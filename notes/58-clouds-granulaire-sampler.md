@@ -97,3 +97,23 @@ pour l'ordinateur (stmlib en mode TEST), un sinus de 220 Hz, 32 échantillons pa
 lissage de l'enveloppe par la table de fenêtre (`lut_window`, absente du port), normalisation de gain (`rsqrt` au-delà
 de deux grains) et correspondance des paramètres (`overlap` élevé au cube dans Clouds). Pas de mesure d'émulation
 encore.
+
+## 9. Alignement du port sur Clouds (étape 1, même réglage des deux côtés)
+
+Mêmes réglages : stéréo, `size` = 4096 échantillons, `overlap` = 0.5 (une cible de 1 grain), `window_shape` = 0.3,
+position 0.5, sinus de 220 Hz à 0.366 plein échelle, 1200 blocs de 32.
+
+| | pic | RMS |
+|---|---|---|
+| Clouds (float) | 0.834 | 0.294 |
+| Port point fixe | 0.905 | 0.294 |
+
+Corrections faites dans le port, d'après cette mesure :
+- normalisation de gain de Clouds (`1/sqrt(n-1)` au-delà de deux grains, gain de fenêtre `1 + 2·shape` fondu par
+  `overlap`) : absente avant ;
+- pente de fenêtre non bornée à 1 (elle vaut 1.61 pour shape 0.3) ;
+- espacement des grains : `grain_size_hint / cible`, et non `× 8` (erreur du port).
+
+Reste : le pic est 8 % plus haut dans le port. Pistes : lissage de la normalisation dans Clouds (`ONE_POLE` 0.01 par
+échantillon, qui part de 1.0), interpolation Hermite de Clouds (absente du port, qui lit linéairement), et la pente
+bornée à 2.0 dans le port. Mesure faite sur l'ordinateur seulement.

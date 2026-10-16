@@ -33,10 +33,10 @@ class GrainFx {
     if (window_shape_q15 >= kOne / 2) {
       slope_q15_ = kOne;  // pas de pente : enveloppe triangulaire pleine
     } else {
-      // slope = 0.5 / (shape + 0.01), borné à 1.0 en Q15
+      // pente = 0.5 / (shape + 0.01) : peut dépasser 1 (le gain est ensuite borné à 1)
       int32_t denom = window_shape_q15 + kOne / 100;
       int32_t s = denom > 0 ? (kOne / 2) * kOne / denom : kOne;
-      slope_q15_ = s > kOne ? kOne : s;
+      slope_q15_ = s > 2 * kOne ? 2 * kOne : s;  // pente bornée à 2.0 : gain * pente tient dans int32
     }
     gain_l_ = gain_l_q15;
     gain_r_ = gain_r_q15;
