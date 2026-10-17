@@ -22,6 +22,8 @@ static const int32_t kMaxGrains = 8;
 class GrainPlayerFx {
  public:
   void Init(uint32_t seed) {
+    num_grains_q16_ = 0;
+    gain_norm_q15_ = kOne;
     for (int32_t i = 0; i < kMaxGrains; ++i) grains_[i].Init();
     rng_ = seed ? seed : 1;
     spacing_phasor_ = 0;
@@ -61,19 +63,41 @@ class GrainPlayerFx {
       }
       if (grains_[i].active()) ++active;
     }
-    // Normalisation de Clouds : 1/sqrt(n-1) au-delà de deux grains actifs, puis un gain de fenêtre
-    // (1 + 2*shape, borné à [1, 2]) fondu selon overlap. Table en Q15 pour n = 1..8.
-    static const int32_t kInvSqrt[kMaxGrains + 1] = {
-        kOne, kOne, kOne, 23170, 18919, 16384, 14654, 13377, 12385};
-    int32_t norm = kInvSqrt[active < 0 ? 0 : (active > kMaxGrains ? kMaxGrains : active)];
+    // Suivi du nombre de grains actifs, comme SLOPE(num_grains_, active, 0.9, 0.2) de Clouds.
+    // Q16 : valeur entière x 65536. Erreur positive : coefficient 0.9 ; négative : 0.2 (Q15 : 29491, 6554).
+    int32_t err = (active << 16) - num_grains_q16_;
+    num_grains_q16_ += (err > 0) ? (int32_t)(((int64_t)err * 29491) >> 15)
+                                 : (int32_t)(((int64_t)err * 6554) >> 15);
+    // Normalisation de Clouds : 1/sqrt(n-1) au-delà de deux grains (n lissé), puis gain de fenêtre
+    // (1 + 2*shape, borné à [1, 2]) fondu selon overlap.
+    int32_t norm = kOne;
+    if (num_grains_q16_ > 2 * 65536) {
+      norm = InvSqrtQ15(num_grains_q16_ - 65536);
+    }
     int32_t w = kOne + 2 * window_shape_;
     if (w > 2 * kOne) w = 2 * kOne;
     if (w < kOne) w = kOne;
     int32_t window_gain = kOne + (((w - kOne) * overlap_) >> 15);
-    norm = (norm * window_gain) >> 15;
-    for (int32_t t = 0; t < 2 * size; ++t) {
-      out[t] = (out[t] * norm) >> 15;
+    int32_t gain_target = (int32_t)(((int64_t)norm * window_gain) >> 15);
+    // Lissage par échantillon : ONE_POLE(gain_normalization_, target, 0.01) de Clouds (0.01 = 328 en Q15).
+    for (int32_t t = 0; t < size; ++t) {
+      gain_norm_q15_ += (int32_t)(((int64_t)(gain_target - gain_norm_q15_) * 328) >> 15);
+      out[2 * t] = (int32_t)(((int64_t)out[2 * t] * gain_norm_q15_) >> 15);
+      out[2 * t + 1] = (int32_t)(((int64_t)out[2 * t + 1] * gain_norm_q15_) >> 15);
     }
+  }
+
+  // 1/sqrt(x) en Q15 pour x en Q16 (x dans [1, 7]), interpolé linéairement dans une table de 1/sqrt(k).
+  static int32_t InvSqrtQ15(int32_t x_q16) {
+    static const int32_t kT[9] = {kOne, kOne, 23170, 18919, 16384, 14654, 13377, 12385, 11585};
+    int32_t k = x_q16 >> 16;
+    if (k < 1) k = 1;
+    if (k > 7) k = 7;
+    int32_t frac = x_q16 - (k << 16);
+    if (frac < 0) frac = 0;
+    if (frac > 65536) frac = 65536;
+    int32_t a = kT[k], b = kT[k + 1];
+    return a + (int32_t)(((int64_t)(b - a) * frac) >> 16);
   }
 
   bool any_active() const {
@@ -139,6 +163,8 @@ class GrainPlayerFx {
   int32_t size_hint_ = 1024;
   int32_t window_shape_ = kOne / 2;
   int32_t overlap_ = 0;
+  int32_t num_grains_q16_ = 0;
+  int32_t gain_norm_q15_ = kOne;
 };
 
 }  // namespace clouds_gran

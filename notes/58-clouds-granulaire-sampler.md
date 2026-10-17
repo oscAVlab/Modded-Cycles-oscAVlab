@@ -117,3 +117,19 @@ Corrections faites dans le port, d'après cette mesure :
 Reste : le pic est 8 % plus haut dans le port. Pistes : lissage de la normalisation dans Clouds (`ONE_POLE` 0.01 par
 échantillon, qui part de 1.0), interpolation Hermite de Clouds (absente du port, qui lit linéairement), et la pente
 bornée à 2.0 dans le port. Mesure faite sur l'ordinateur seulement.
+
+### 9 bis. Suivi du nombre de grains et lissage de la normalisation
+
+Ajoutés au port, comme dans Clouds : `SLOPE(num_grains_, actifs, 0.9, 0.2)` (en Q16), normalisation `1/sqrt(n-1)`
+sur le compte lissé, et `ONE_POLE(gain_normalization_, cible, 0.01)` par échantillon.
+
+| | pic (tout le test) | pic (après 600 blocs) | RMS (après 600 blocs) |
+|---|---|---|---|
+| Clouds (float) | 0.834 | 0.477 | 0.296 |
+| Port point fixe | 0.903 | 0.475 | 0.292 |
+
+En régime établi, le port suit Clouds à 0.5 % près. L'écart restant de 8 % est dans le démarrage (premiers 600 blocs) :
+le compte de grains actifs n'est pas pris au même instant que dans Clouds (Clouds le prend après l'affectation des
+nouveaux grains du bloc, le port après leur rendu), et l'interpolation Hermite de Clouds n'est pas portée. À traiter
+avec la prise en compte en émulation, pas avant.
+Coût : les produits 32 × 32 bits passent par `int64_t`, donc par libgcc sur le 54418 ; à mesurer en émulation.
