@@ -133,3 +133,19 @@ le compte de grains actifs n'est pas pris au même instant que dans Clouds (Clou
 nouveaux grains du bloc, le port après leur rendu), et l'interpolation Hermite de Clouds n'est pas portée. À traiter
 avec la prise en compte en émulation, pas avant.
 Coût : les produits 32 × 32 bits passent par `int64_t`, donc par libgcc sur le 54418 ; à mesurer en émulation.
+
+## 10. Points d'intégration (étape 1, lecture de `src/model_tg.s`)
+
+- **Granulaire existant** : `loop_mode` 3 (Granular) et 4 (Stretch) passent par `sv_gmono` puis `gran_fill`. Le moteur
+  de Model-TG a 6 grains (`GR_MAX = 6`) et 28 octets d'état par piste (`GR_STRIDE`, `gran_state`). Le mode Clouds
+  remplace cet appel en `loop_mode` 7, avec les mêmes arguments (piste, pas entier, fraction du pas, base PCM,
+  nombre d'échantillons).
+- **Contrainte de mémoire** : le sample est en segments de 1 MiB (allocateur buddy du firmware) ; un échantillon
+  d'indice `idx` est à l'octet `64 + idx*2`, segment `>> 20`, décalage `& 0xFFFFF`. Le port suppose un tampon continu.
+  Il faut une lecture par segment (ou une fenêtre de copie), à mesurer.
+- **Lecture** : le PCM est en big-endian 16 bits mono à 48 kHz. Le ColdFire est big-endian, donc `int16_t` se lit
+  directement sans conversion.
+- **Différence audible à justifier** : Clouds doit sonner autrement que le granulaire de Model-TG (6 grains, enveloppe de
+  Model-TG). Sinon le mode fait doublon ; c'est une question pour Maxime avant la suite.
+- **Prochaine étape** : confirmer comment `gran_fill` lit le PCM à travers les segments (routine `sv_fetch` ou
+  équivalente) et décider entre lecture segmentée et copie de fenêtre, puis écrire l'appel depuis `sv_gmono`.
