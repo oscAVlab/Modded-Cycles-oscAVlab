@@ -149,3 +149,16 @@ Coût : les produits 32 × 32 bits passent par `int64_t`, donc par libgcc sur le
   Model-TG). Sinon le mode fait doublon ; c'est une question pour Maxime avant la suite.
 - **Prochaine étape** : confirmer comment `gran_fill` lit le PCM à travers les segments (routine `sv_fetch` ou
   équivalente) et décider entre lecture segmentée et copie de fenêtre, puis écrire l'appel depuis `sv_gmono`.
+
+## 11. Contrôles du cabezal (décision du 19/10/2026)
+
+Demande de Maxime : plus de contrôle sur les têtes de lecture, à la manière d'Emit (pack Inspired Nature de Live) :
+position, vitesse, direction, et un filtre. Décision : **vitesse et direction sur deux potards distincts**.
+
+- Potards de la page principale : Position, Vitesse, Direction, Densité (quatre au total).
+- Filtre (coupure, résonance) et dispersion (Spray) : page SHIFT. À confirmer.
+- Vitesse : avance du cabezal dans le sample, au centre = arrêt. Coût CPU négligeable.
+- Direction : sens de lecture, en plus de la vitesse ; le potentiomètre ne sert que de sens (avant / arrière).
+- Filtre : deux pôles en point fixe (coupure, résonance), pas un filtre spectral. Le filtre spectral (FFT) reste
+  l'étape 3, à mesurer avant de le promettre.
+- Pas d'affichage du spectrogramme : l'écran de l'appareil ne le permet pas.
